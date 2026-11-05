@@ -1,0 +1,23 @@
+# Build products and environments (rebuilt by build_windows.bat / build_linux.sh / build_macos.command)
+build/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+build_log.txt
+ENS_Tools_Windows.zip
+ENS_Tools_Linux.tar.gz
+*.part[0-9][0-9]
+
+# Lab data must never be committed (images, spectral stacks, workbooks, exports)
+*.tif
+*.tiff
+*.lsm
+*.jpg
+*.jpeg
+*.xlsx
+*.xls
+*.csv
+*.zip
+_backups_ENS_database/

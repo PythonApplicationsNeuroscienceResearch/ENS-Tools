@@ -1,0 +1,49 @@
+ENS TOOLS - Source code + build script (Windows)
+================================================
+
+Authors: (c) 2026 Anis Kebbiche (github.com/anis-kebbiche), Petia Georgieva (github.com/petia-georgieva), Manal Achami (github.com/manal-achami)
+Released under the MIT License (see LICENSE).
+
+This folder contains the Python code of the two applications:
+  - ENS_Image_Database  (project #5: image database, identity cards, multi-criteria search)
+  - Spectral_Analyzer   (project #6: ROIs, normalised spectra, export)
+and the script build_windows.bat that builds the two .exe programs.
+Linux: build_linux.sh. macOS: build_macos.command.
+
+REQUIREMENTS (once)
+1) Windows 10 or 11, 64-bit, with an internet connection.
+2) Python 3.10 to 3.15, 64-bit, from https://www.python.org/downloads/
+   IMPORTANT: during the installation, tick "Add python.exe to PATH".
+
+BUILD
+1) Unzip this file (right-click > Extract All) into a simple folder,
+   for example Documents\ENS_Tools. Do not work from inside the zip.
+2) Double-click build_windows.bat.
+   It creates a fresh Python environment, installs the libraries,
+   runs the automated tests, then builds the two programs
+   (5 to 15 minutes depending on the PC).
+3) At the end, the file explorer opens on ENS_Tools_Windows.zip:
+   this is the ready-to-use version (the .exe files), to send to anyone.
+   The programs are also in the "dist" folder:
+     dist\ENS_Image_Database\ENS_Image_Database.exe
+     dist\Spectral_Analyzer\Spectral_Analyzer.exe
+   Never start the .exe files of the "build" folder (intermediate files).
+
+IF AN ERROR OCCURS
+- The window shows the last lines of build_log.txt.
+- "Python not found": reinstall Python and tick "Add python.exe to PATH".
+- "Cannot delete the old dist folder": close both applications and run it again.
+
+RUN WITHOUT BUILDING (to read or modify the code)
+- After a first build, run_ens_database.bat and run_spectral_analyzer.bat
+  start the applications directly from the code.
+- Read the code in VS Code: File > Open Folder > ENS_Tools.
+  ens_database\ = project #5, spectral_analyzer\ = project #6, tests\ = tests.
+
+DATA
+The data (Excel workbook, images, spectral stacks) are not in this zip.
+On the first start of the image database, select:
+  - the most recent Excel workbook (Results Patho_DH definitif 06-10-2025 CLEMENT.xlsx)
+  - the image folder (the per-slide .zip archives work directly)
+  - (optional) the folder of spectral stacks
+Detailed description: README.md
