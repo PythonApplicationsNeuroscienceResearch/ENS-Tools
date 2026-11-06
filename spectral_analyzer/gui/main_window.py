@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QColo
                                QGroupBox,
                                QHBoxLayout, QHeaderView, QLabel, QListWidget, QListWidgetItem,
                                QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider,
-                               QSpinBox,
+                               QSizePolicy, QSpinBox,
                                QSplitter, QTableWidget, QTableWidgetItem, QToolBar, QToolButton,
                                QVBoxLayout, QWidget)
 
@@ -55,6 +55,50 @@ def short_name(name: str) -> str:
     return re.sub(r"[-_ ]slice\d+$", "", name, flags=re.IGNORECASE)
 
 
+class InfoLabel(QLabel):
+    """One-line label that never changes the width of its pane: text that does not fit is cut
+    with '…' (the full text is in the tooltip).
+
+    The pixel information under an image changes length while the mouse moves. With a normal
+    QLabel the pane widened and narrowed with it; in 'Compare two images' mode the image was then
+    refitted to the new size, so it grew and shrank in a loop under the mouse.
+    """
+
+    def __init__(self, text: str = " ", parent=None):
+        """Create the label with a size policy that ignores the text width."""
+        super().__init__(parent)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self._full = ""
+        self.setText(text)
+
+    def setText(self, text: str) -> None:
+        """Store the full text and show the part that fits the current width."""
+        self._full = text
+        self.setToolTip(text if text.strip() else "")
+        self._refresh()
+
+    def fullText(self) -> str:
+        """Full, non-shortened text."""
+        return self._full
+
+    def resizeEvent(self, event) -> None:
+        """Shorten the text again when the pane is resized."""
+        super().resizeEvent(event)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        """Show the full text cut with '…' at the label width."""
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideRight, max(0, self.width())))
+
+    def sizeHint(self) -> QSize:
+        """Width 0: the text never asks for more room (height of one line)."""
+        return QSize(0, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:
+        """Width 0: the text never imposes a minimum pane width."""
+        return QSize(0, super().minimumSizeHint().height())
+
+
 class Pane(QWidget):
     """One image viewer with its image selector."""
 
@@ -85,7 +129,7 @@ class Pane(QWidget):
         lay.addLayout(top)
         self.viewer = SpectralViewer()
         lay.addWidget(self.viewer, 1)
-        self.info = QLabel(" ")
+        self.info = InfoLabel(" ")
         self.info.setStyleSheet("color: #9aa7ba;")
         lay.addWidget(self.info)
 
@@ -151,6 +195,17 @@ class MainWindow(QMainWindow):
         tb.setIconSize(QSize(16, 16))
         tb.setMovable(False)
         self.addToolBar(tb)
+        # Show / hide the left panel (hidden automatically in 'Compare two images' mode).
+        self.panel_action = QAction("☰", self)
+        self.panel_action.setCheckable(True)
+        self.panel_action.setChecked(True)
+        self.panel_action.setShortcut(QKeySequence("Ctrl+B"))
+        self.panel_action.setToolTip("Show / hide the left panel: image list and display settings (Ctrl+B)")
+        self.panel_action.toggled.connect(self._set_left_panel)
+        # A click by the user overrides the automatic folding of 'Compare two images'.
+        self.panel_action.triggered.connect(lambda: setattr(self, "_panel_auto_hidden", False))
+        tb.addAction(self.panel_action)
+        tb.addSeparator()
         a = QAction("📂 Open stack(s)…", self)
         a.setShortcut(QKeySequence.Open)
         a.triggered.connect(self.open_dialog)
@@ -371,6 +426,8 @@ class MainWindow(QMainWindow):
         self.readout = QLabel("Move the mouse over the plot to read wavelengths and values.")
         self.readout.setStyleSheet("color: #9aa7ba;")
         self.readout.setWordWrap(True)
+        # Room for two lines from the start, so that the plot does not jump when the text grows.
+        self.readout.setMinimumHeight(2 * self.readout.fontMetrics().lineSpacing() + 6)
         rl.addWidget(self.readout)
         self._hover_line = None
         self._hover_x: Optional[float] = None     # last wavelength under the mouse (None = outside)
@@ -508,6 +565,8 @@ class MainWindow(QMainWindow):
         left_scroll.setFrameShape(QScrollArea.NoFrame)
         left_scroll.setWidget(left)
         left_scroll.setMinimumWidth(left.minimumSizeHint().width() + 14)
+        self.left_panel = left_scroll
+        self._panel_auto_hidden = False      # True when hidden by 'Compare two images'
         main.addWidget(left_scroll)
         main.addWidget(centre)
         main.addWidget(right)
@@ -791,8 +850,33 @@ class MainWindow(QMainWindow):
         if getattr(self, "show_mean", None) and self.show_mean.isChecked():   # follows the panes
             self._schedule_replot()
 
+    def _set_left_panel(self, visible: bool) -> None:
+        """Show or hide the left panel (button ☰ at the top left, Ctrl+B). The freed width goes
+        to the images, and the panel gets its previous width back when it reappears."""
+        panel = getattr(self, "left_panel", None)
+        if panel is not None and panel.isVisible() != visible:
+            main = self.centralWidget()
+            sizes = main.sizes()                 # [left panel, images, right panel]
+            if visible:
+                width = getattr(self, "_left_width", 270)
+                panel.setVisible(True)
+                main.setSizes([width, max(200, sizes[1] - width), sizes[2]])
+            else:
+                self._left_width = sizes[0]
+                panel.setVisible(False)
+                main.setSizes([0, sizes[1] + sizes[0], sizes[2]])
+        if self.panel_action.isChecked() != visible:
+            self.panel_action.setChecked(visible)
+
     def _split_toggled(self, on: bool) -> None:
-        """Show or hide the second image pane ('Compare two images')."""
+        """Show or hide the second image pane ('Compare two images'). The left panel is folded
+        away while two images are compared, to give them room, and comes back afterwards."""
+        if on and self.panel_action.isChecked():
+            self._panel_auto_hidden = True
+            self._set_left_panel(False)
+        elif not on and self._panel_auto_hidden:
+            self._panel_auto_hidden = False
+            self._set_left_panel(True)
         self.panes[1].setVisible(on)
         if on:
             self._show_pane(1)
@@ -1637,7 +1721,7 @@ class MainWindow(QMainWindow):
             "3. The mean spectrum of the ROI is plotted immediately (normalised to max = 1 by "
             "default). Rename ROIs in the table; untick 'Show' to hide one.\n"
             "4. To compare a pathological and a control sample, tick 'Compare two images' and draw "
-            "ROIs on both.\n"
+            "ROIs on both. The left panel folds away; ☰ at the top left (Ctrl+B) brings it back.\n"
             "5. Optional background subtraction (menu 'Background'): ROIs given the role "
             "'Background', the 1 % dimmest pixels of the image, or an automatic ring around each "
             "ROI (local background, no drawing needed).\n"
